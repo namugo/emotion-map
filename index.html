@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emotion Map Prototype</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+    }
+
+    #map-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    #floorplan {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    #emotion-picker {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      z-index: 10;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .marker {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.6;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      animation: pulse 1.5s ease-out forwards;
+    }
+
+    .marker:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      top: -24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0.8;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.6;
+      }
+    }
+
+    #emotion-pad {
+      width: 150px;
+      height: 150px;
+      position: relative;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      touch-action: none;
+      background: linear-gradient(to top, rgba(255,0,0,1), rgba(255,0,0,0.2)), linear-gradient(to right, red, yellow, green);
+      background-blend-mode: multiply;
+    }
+
+    #pad-gradient {
+      display: none;
+    }
+
+    #pad-cursor {
+      width: 10px;
+      height: 10px;
+      background-color: black;
+      border-radius: 50%;
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    .axis-label {
+      position: absolute;
+      font-size: 12px;
+      color: #333;
+    }
+
+    #label-left {
+      left: -40px;
+      top: 50%;
+      transform: translateY(-50%) rotate(-90deg);
+    }
+
+    #label-bottom {
+      bottom: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    #submit-slider {
+      padding: 6px 12px;
+      background: #3498db;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="map-container">
+    <img id="floorplan" src="floorplan.png" alt="Floorplan" />
+  </div>
+
+  <div id="emotion-picker" class="hidden">
+    <p>감정 선택 (가로: 기분, 세로: 강도)</p>
+    <div id="emotion-pad">
+      <div id="pad-gradient"></div>
+      <div id="pad-cursor"></div>
+      <div class="axis-label" id="label-left">감정의 크기</div>
+      <div class="axis-label" id="label-bottom">감정의 종류</div>
+    </div>
+    <button id="submit-slider">기록</button>
+  </div>
+
+  <script>
+    const mapContainer = document.getElementById('map-container');
+    const emotionPicker = document.getElementById('emotion-picker');
+    const emotionPad = document.getElementById('emotion-pad');
+    const padCursor = document.getElementById('pad-cursor');
+    const submitSlider = document.getElementById('submit-slider');
+
+    let clickX = 0;
+    let clickY = 0;
+    let padX = 75;
+    let padY = 75;
+    let cursorLocked = false;
+
+    mapContainer.addEventListener('click', function (e) {
+      const rect = mapContainer.getBoundingClientRect();
+      clickX = e.clientX - rect.left;
+      clickY = e.clientY - rect.top;
+
+      emotionPicker.style.left = `${clickX}px`;
+      emotionPicker.style.top = `${clickY}px`;
+      emotionPicker.classList.remove('hidden');
+      cursorLocked = false;
+    });
+
+    emotionPad.addEventListener('pointermove', function (e) {
+      if (cursorLocked) return;
+      const rect = emotionPad.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      padCursor.style.left = `${x}px`;
+      padCursor.style.top = `${y}px`;
+    });
+
+    emotionPad.addEventListener('pointerdown', function (e) {
+      const rect = emotionPad.getBoundingClientRect();
+      padX = e.clientX - rect.left;
+      padY = e.clientY - rect.top;
+
+      padCursor.style.left = `${padX}px`;
+      padCursor.style.top = `${padY}px`;
+
+      cursorLocked = true;
+    });
+
+    submitSlider.addEventListener('click', function () {
+      const typeValue = Math.min(Math.max(padX / 150, 0), 1);
+      const intensityValue = Math.min(Math.max(1 - padY / 150, 0), 1);
+
+      const color = getColorGradient(typeValue, intensityValue);
+      const size = 20 + intensityValue * 80;
+
+      const emotions = ['슬픔', '짜증남', '무감정', '기쁨', '행복함'];
+      const strengths = ['매우 약함', '약함', '보통', '강함', '매우 강함'];
+
+      const typeIndex = Math.floor(typeValue * emotions.length);
+      const intensityIndex = Math.floor(intensityValue * strengths.length);
+
+      const marker = document.createElement('div');
+      marker.className = 'marker';
+      marker.style.backgroundColor = color;
+      marker.style.width = `${size}px`;
+      marker.style.height = `${size}px`;
+      marker.style.left = `${clickX}px`;
+      marker.style.top = `${clickY}px`;
+      marker.setAttribute('data-tooltip', `(${emotions[typeIndex]}, ${strengths[intensityIndex]})`);
+
+      mapContainer.appendChild(marker);
+      emotionPicker.classList.add('hidden');
+    });
+
+    // 팝업창 바깥으로 마우스 벗어나면 사라지게 처리
+    document.addEventListener('click', function(event) {
+      const isClickInside = emotionPicker.contains(event.target);
+      const isMapClick = mapContainer.contains(event.target);
+      if (!isClickInside && !isMapClick) {
+        emotionPicker.classList.add('hidden');
+      }
+    });
+
+    function getColorGradient(t, intensity) {
+      const hue = 0 + (120 - 0) * t;
+      const lightness = 90 - intensity * 50;
+      return `hsl(${hue}, 90%, ${lightness}%)`;
+    }
+  </script>
+</body>
+</html>
